@@ -826,40 +826,153 @@ if(SR){
   };
 }
 
+// ── Lanterna ──────────────────────────────────────────────────
+let torchTrack = null;
+async function toggleTorch(on){
+  try{
+    if(!navigator.mediaDevices) throw new Error('não suportado');
+    if(on){
+      const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+      torchTrack = stream.getVideoTracks()[0];
+      await torchTrack.applyConstraints({advanced:[{torch:true}]});
+      return true;
+    } else {
+      if(torchTrack){ torchTrack.stop(); torchTrack=null; }
+      return true;
+    }
+  } catch(e){ return false; }
+}
+
+// ── Mapa de Apps / Sites ──────────────────────────────────────
+const APP_MAP = {
+  // Jogos
+  'free fire':'https://ff.garena.com','roblox':'https://www.roblox.com',
+  'minecraft':'https://minecraft.net','fortnite':'https://www.fortnite.com',
+  'clash of clans':'https://clashofclans.com','among us':'https://www.innersloth.com/games/among-us/',
+  'stumble guys':'https://www.stumbleguys.com','call of duty':'https://www.callofduty.com',
+  'pokemon':'https://www.pokemon.com',
+  // Redes sociais
+  'youtube':'https://www.youtube.com','instagram':'https://www.instagram.com',
+  'tiktok':'https://www.tiktok.com','twitter':'https://www.twitter.com',
+  'facebook':'https://www.facebook.com','whatsapp':'https://web.whatsapp.com',
+  'telegram':'https://web.telegram.org','snapchat':'https://www.snapchat.com',
+  'pinterest':'https://www.pinterest.com','linkedin':'https://www.linkedin.com',
+  'twitch':'https://www.twitch.tv','discord':'https://discord.com/app',
+  'reddit':'https://www.reddit.com','x':'https://www.x.com',
+  // Música / vídeo
+  'spotify':'https://open.spotify.com','netflix':'https://www.netflix.com',
+  'prime video':'https://www.primevideo.com','disney plus':'https://www.disneyplus.com',
+  'globoplay':'https://globoplay.globo.com','deezer':'https://www.deezer.com',
+  // Utilidades
+  'google':'https://www.google.com','gmail':'https://mail.google.com',
+  'google maps':'https://maps.google.com','google drive':'https://drive.google.com',
+  'google fotos':'https://photos.google.com','google tradutor':'https://translate.google.com',
+  'wikipedia':'https://pt.wikipedia.org','amazon':'https://www.amazon.com.br',
+  'mercado livre':'https://www.mercadolivre.com.br','nubank':'https://nubank.com.br',
+  'ifood':'https://www.ifood.com.br','uber':'https://www.uber.com',
+  '99':'https://99app.com','rappi':'https://www.rappi.com.br',
+  'github':'https://www.github.com','railway':'https://railway.com',
+  'chatgpt':'https://chat.openai.com',
+};
+
 // ── Processamento de comandos de voz ──────────────────────────
 function processVoiceCommand(lower, original){
   document.getElementById('chat-input').value = original;
 
-  // Comandos especiais por voz
-  if(lower.includes('jarvis silencia') || lower.includes('para de falar') || lower.includes('cala boca')){
-    window.speechSynthesis && window.speechSynthesis.cancel();
-    ttsEnabled = false;
-    document.getElementById('tts-btn').textContent = '🔇';
-    appendMsg('Modo silencioso ativado, Sr. Stark.','jarvis');
+  // ── Lanterna ──────────────────────────────────────────────
+  if(lower.includes('acende lanterna')||lower.includes('acender lanterna')||
+     lower.includes('liga lanterna')||lower.includes('ligar lanterna')||
+     (lower.includes('acende')&&lower.includes('lanterna'))||
+     (lower.includes('liga')&&lower.includes('lanterna'))){
+    toggleTorch(true).then(ok=>{
+      const msg = ok ? '🔦 Lanterna acesa, Sr. Stark.' : '🔦 Não consegui acessar a lanterna. Permita o acesso à câmera no Chrome.';
+      appendMsg(msg,'jarvis'); jarvisSpeak(msg);
+    });
     return;
   }
-  if(lower.includes('jarvis fala') || lower.includes('pode falar') || lower.includes('ativa voz')){
-    ttsEnabled = true;
-    document.getElementById('tts-btn').textContent = '🔊';
+  if(lower.includes('apaga lanterna')||lower.includes('apagar lanterna')||
+     lower.includes('desliga lanterna')||lower.includes('desligar lanterna')||
+     (lower.includes('apaga')&&lower.includes('lanterna'))){
+    toggleTorch(false).then(()=>{
+      const msg = '🔦 Lanterna apagada, Sr. Stark.';
+      appendMsg(msg,'jarvis'); jarvisSpeak(msg);
+    });
+    return;
+  }
+
+  // ── YouTube com pesquisa ──────────────────────────────────
+  if(lower.includes('youtube')){
+    const m = lower.match(/youtube\s+(?:o\s+|a\s+|um\s+|uma\s+)?(.+)/);
+    if(m && m[1].length > 1){
+      const q = m[1];
+      const msg = `Procurando "${q}" no YouTube, Sr. Stark.`;
+      appendMsg(msg,'jarvis'); jarvisSpeak(msg);
+      setTimeout(()=>window.open('https://www.youtube.com/results?search_query='+encodeURIComponent(q),'_blank'),800);
+    } else {
+      const msg = 'Abrindo YouTube, Sr. Stark.';
+      appendMsg(msg,'jarvis'); jarvisSpeak(msg);
+      setTimeout(()=>window.open('https://www.youtube.com','_blank'),800);
+    }
+    return;
+  }
+
+  // ── Abrir apps / sites ────────────────────────────────────
+  const openTriggers = ['abre ','abrir ','entra no ','entra na ','entra em ','vai para ','vai pro ','vai pra ','vai no ','vai na ','abra ','acessa ','acessar ','ir para ','ir no ','ir na ','ir pro ','ir pra '];
+  const wantsOpen = openTriggers.some(t => lower.includes(t));
+  if(wantsOpen){
+    for(const [name, url] of Object.entries(APP_MAP)){
+      if(lower.includes(name)){
+        const msg = `Abrindo ${name}, Sr. Stark.`;
+        appendMsg(msg,'jarvis'); jarvisSpeak(msg);
+        setTimeout(()=>window.open(url,'_blank'),1000);
+        return;
+      }
+    }
+    // Não encontrou — pesquisa no Google
+    for(const t of openTriggers){
+      if(lower.includes(t)){
+        const after = lower.slice(lower.indexOf(t)+t.length).trim().replace(/^(o |a |os |as |um |uma )/,'');
+        if(after.length > 1){
+          const msg = `Não conheço "${after}" ainda, mas vou pesquisar no Google, Sr. Stark.`;
+          appendMsg(msg,'jarvis'); jarvisSpeak(msg);
+          setTimeout(()=>window.open('https://www.google.com/search?q='+encodeURIComponent(after),'_blank'),800);
+          return;
+        }
+      }
+    }
+  }
+
+  // ── Pesquisa no Google ────────────────────────────────────
+  if(lower.startsWith('pesquisa ')||lower.startsWith('busca ')||lower.startsWith('google ')){
+    const q = original.split(' ').slice(1).join(' ');
+    const msg = `Pesquisando "${q}" no Google, Sr. Stark.`;
+    appendMsg(msg,'jarvis'); jarvisSpeak(msg);
+    setTimeout(()=>window.open('https://www.google.com/search?q='+encodeURIComponent(q),'_blank'),800);
+    return;
+  }
+
+  // ── Comandos do sistema ───────────────────────────────────
+  if(lower.includes('jarvis silencia')||lower.includes('para de falar')||lower.includes('cala boca')){
+    window.speechSynthesis&&window.speechSynthesis.cancel();
+    ttsEnabled=false; document.getElementById('tts-btn').textContent='🔇';
+    appendMsg('Modo silencioso ativado, Sr. Stark.','jarvis'); return;
+  }
+  if(lower.includes('jarvis fala')||lower.includes('pode falar')||lower.includes('ativa voz')){
+    ttsEnabled=true; document.getElementById('tts-btn').textContent='🔊';
     appendMsg('Voz reativada, Sr. Stark.','jarvis');
-    jarvisSpeak('Voz reativada, Sr. Stark.');
-    return;
+    jarvisSpeak('Voz reativada, Sr. Stark.'); return;
   }
-  if(lower.includes('modo contínuo') || lower.includes('fica escutando') || lower.includes('modo ativo')){
-    continuousMode = true;
-    document.getElementById('vbtn').textContent = '🟢';
+  if(lower.includes('fica escutando')||lower.includes('modo contínuo')||lower.includes('modo ativo')){
+    continuousMode=true; document.getElementById('vbtn').textContent='🟢';
     appendMsg('Modo contínuo ativado. Estou ouvindo constantemente, Sr. Stark.','jarvis');
-    jarvisSpeak('Modo contínuo ativado. Estou ouvindo constantemente, Sr. Stark.');
-    return;
+    jarvisSpeak('Modo contínuo ativado.'); return;
   }
-  if(lower.includes('para de ouvir') || lower.includes('modo normal') || lower.includes('desativa contínuo')){
-    continuousMode = false;
-    recog && recog.stop();
-    document.getElementById('vbtn').textContent = '🎤';
+  if(lower.includes('para de ouvir')||lower.includes('modo normal')||lower.includes('desativa contínuo')){
+    continuousMode=false; recog&&recog.stop();
+    document.getElementById('vbtn').textContent='🎤';
     document.getElementById('vbtn').classList.remove('va');
     appendMsg('Modo contínuo desativado.','jarvis');
-    jarvisSpeak('Desativado.');
-    return;
+    jarvisSpeak('Desativado.'); return;
   }
 
   // Envia pro chat normalmente

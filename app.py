@@ -503,8 +503,13 @@ footer{text-align:center;padding:16px;color:var(--dim);font-size:.72rem;letter-s
     <div class="chat-box" id="chat-box"></div>
     <div class="crow">
       <input class="cinput" id="chat-input" type="text" placeholder="Fale com o J.A.R.V.I.S..." onkeydown="if(event.key==='Enter')sendChat()"/>
-      <button class="btn" id="vbtn" onclick="toggleVoice()" title="Voz">&#127908;</button>
-      <button class="btn" onclick="sendChat()">&#9654; Enviar</button>
+      <button class="btn" id="vbtn"   onclick="toggleVoice()"      title="Microfone — toque para falar">🎤</button>
+      <button class="btn" id="cont-btn" onclick="toggleContinuous()" title="Modo contínuo — Jarvis fica escutando">👂</button>
+      <button class="btn" id="tts-btn"  onclick="toggleTTS()"        title="Voz do Jarvis — ligar/desligar">🔊</button>
+      <button class="btn" onclick="sendChat()">&#9654;</button>
+    </div>
+    <div style="font-size:.68rem;color:var(--dim);margin-top:6px;padding:0 4px">
+      💡 Diga <strong style="color:var(--cyan)">"Jarvis silencia"</strong> para calar a voz &middot; <strong style="color:var(--cyan)">"fica escutando"</strong> para modo contínuo
     </div>
   </div>
 
@@ -704,21 +709,26 @@ async function sendChat(){
     const d = await fetch('/api/joke').then(r=>r.json());
     thinking.className='msg jarvis';
     thinking.innerHTML='<div class="sender">J.A.R.V.I.S</div>'+d.joke;
-    chatHistory.push({role:'assistant',content:d.joke}); saveHistory(); return;
+    chatHistory.push({role:'assistant',content:d.joke}); saveHistory();
+    jarvisSpeak(d.joke); return;
   }
   if(lower.startsWith('wiki ')||lower.startsWith('pesquisa ')){
     const q = text.split(' ').slice(1).join(' ');
     const d = await fetch('/api/wiki?q='+encodeURIComponent(q)).then(r=>r.json());
     const resp = d.error?'Erro: '+d.error:'<strong>'+d.title+'</strong><br><span style="font-size:.8rem;color:var(--dim)">'+d.summary+'</span>';
+    const plain = d.error||((d.title||'')+': '+(d.summary||''));
     thinking.className='msg jarvis'; thinking.innerHTML='<div class="sender">J.A.R.V.I.S</div>'+resp;
-    chatHistory.push({role:'assistant',content:d.error||d.title+': '+d.summary}); saveHistory(); return;
+    chatHistory.push({role:'assistant',content:plain}); saveHistory();
+    jarvisSpeak(plain.slice(0,300)); return;
   }
   if(lower.startsWith('calc ')){
     const expr = text.slice(5);
     const d = await fetch('/api/calc?expr='+encodeURIComponent(expr)).then(r=>r.json());
     const resp = '<code>'+expr+' = '+(d.result!=null?d.result:d.error)+'</code>';
+    const plain = expr+' = '+(d.result!=null?d.result:d.error);
     thinking.className='msg jarvis'; thinking.innerHTML='<div class="sender">J.A.R.V.I.S</div>'+resp;
-    chatHistory.push({role:'assistant',content:expr+' = '+(d.result!=null?d.result:d.error)}); saveHistory(); return;
+    chatHistory.push({role:'assistant',content:plain}); saveHistory();
+    jarvisSpeak(plain); return;
   }
 
   const res = await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:text,history:chatHistory.slice(-10)})}).then(r=>r.json());
@@ -726,23 +736,174 @@ async function sendChat(){
   thinking.className='msg jarvis'; thinking.innerHTML='<div class="sender">J.A.R.V.I.S</div>'+reply;
   chatHistory.push({role:'assistant',content:reply}); saveHistory();
   if(res.provider) document.getElementById('ai-badge').textContent=res.provider.toUpperCase();
+  jarvisSpeak(reply);
 }
 function qcmd(t){ document.getElementById('chat-input').value=t; sendChat(); }
 
-// ── Voice Input ────────────────────────────────────────────────
+// ── Voice System (STT + TTS) ────────────────────────────────────
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recog=null, listening=false;
-if(SR){
-  recog=new SR(); recog.lang='pt-BR'; recog.continuous=false; recog.interimResults=false;
-  recog.onresult=e=>{ document.getElementById('chat-input').value=e.results[0][0].transcript; sendChat(); };
-  recog.onend=()=>{ listening=false; const b=document.getElementById('vbtn'); b.textContent='🎤'; b.classList.remove('va'); };
-  recog.onerror=()=>{ listening=false; const b=document.getElementById('vbtn'); b.textContent='🎤'; b.classList.remove('va'); };
+let recog=null, listening=false, continuousMode=false, voiceEnabled=true, ttsEnabled=true;
+
+// ── TTS — Jarvis fala de volta ─────────────────────────────────
+function jarvisSpeak(text){
+  if(!ttsEnabled || !window.speechSynthesis) return;
+  // Remove markdown e HTML
+  const clean = text.replace(/<[^>]+>/g,'').replace(/[*_`#•]/g,'').replace(/\n/g,' ').trim();
+  if(!clean) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(clean);
+  utt.lang = 'pt-BR';
+  utt.rate = 1.05;
+  utt.pitch = 0.85;
+  utt.volume = 1.0;
+  // Tenta usar voz masculina se disponível
+  const voices = window.speechSynthesis.getVoices();
+  const ptVoice = voices.find(v => v.lang.startsWith('pt') && v.name.toLowerCase().includes('male'))
+    || voices.find(v => v.lang.startsWith('pt-BR'))
+    || voices.find(v => v.lang.startsWith('pt'));
+  if(ptVoice) utt.voice = ptVoice;
+  window.speechSynthesis.speak(utt);
 }
+
+// Garante que vozes estejam carregadas
+if(window.speechSynthesis){
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+  window.speechSynthesis.getVoices();
+}
+
+// ── STT — Jarvis escuta ────────────────────────────────────────
+if(SR){
+  recog = new SR();
+  recog.lang = 'pt-BR';
+  recog.continuous = false;
+  recog.interimResults = true;
+
+  recog.onstart = () => {
+    listening = true;
+    const b = document.getElementById('vbtn');
+    b.textContent = '🔴'; b.classList.add('va');
+    document.getElementById('chat-input').placeholder = '🎤 Ouvindo...';
+  };
+
+  recog.onresult = e => {
+    let interim = '', final = '';
+    for(let i = e.resultIndex; i < e.results.length; i++){
+      if(e.results[i].isFinal) final += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    if(interim) document.getElementById('chat-input').value = interim;
+    if(final){
+      document.getElementById('chat-input').value = final;
+      // Processa comando de voz
+      processVoiceCommand(final.trim().toLowerCase(), final.trim());
+    }
+  };
+
+  recog.onend = () => {
+    listening = false;
+    const b = document.getElementById('vbtn');
+    b.textContent = continuousMode ? '🟢' : '🎤';
+    if(!continuousMode) b.classList.remove('va');
+    document.getElementById('chat-input').placeholder = 'Fale com o J.A.R.V.I.S...';
+    // Modo contínuo: reinicia automaticamente
+    if(continuousMode){
+      setTimeout(() => { try{ recog.start(); }catch(e){} }, 300);
+    }
+  };
+
+  recog.onerror = e => {
+    listening = false;
+    if(e.error !== 'no-speech' && e.error !== 'aborted'){
+      appendMsg(`Erro de voz: ${e.error}`,'jarvis');
+    }
+    const b = document.getElementById('vbtn');
+    b.textContent = continuousMode ? '🟢' : '🎤';
+    if(!continuousMode) b.classList.remove('va');
+    document.getElementById('chat-input').placeholder = 'Fale com o J.A.R.V.I.S...';
+    if(continuousMode && e.error === 'no-speech'){
+      setTimeout(() => { try{ recog.start(); }catch(e){} }, 500);
+    }
+  };
+}
+
+// ── Processamento de comandos de voz ──────────────────────────
+function processVoiceCommand(lower, original){
+  document.getElementById('chat-input').value = original;
+
+  // Comandos especiais por voz
+  if(lower.includes('jarvis silencia') || lower.includes('para de falar') || lower.includes('cala boca')){
+    window.speechSynthesis && window.speechSynthesis.cancel();
+    ttsEnabled = false;
+    document.getElementById('tts-btn').textContent = '🔇';
+    appendMsg('Modo silencioso ativado, Sr. Stark.','jarvis');
+    return;
+  }
+  if(lower.includes('jarvis fala') || lower.includes('pode falar') || lower.includes('ativa voz')){
+    ttsEnabled = true;
+    document.getElementById('tts-btn').textContent = '🔊';
+    appendMsg('Voz reativada, Sr. Stark.','jarvis');
+    jarvisSpeak('Voz reativada, Sr. Stark.');
+    return;
+  }
+  if(lower.includes('modo contínuo') || lower.includes('fica escutando') || lower.includes('modo ativo')){
+    continuousMode = true;
+    document.getElementById('vbtn').textContent = '🟢';
+    appendMsg('Modo contínuo ativado. Estou ouvindo constantemente, Sr. Stark.','jarvis');
+    jarvisSpeak('Modo contínuo ativado. Estou ouvindo constantemente, Sr. Stark.');
+    return;
+  }
+  if(lower.includes('para de ouvir') || lower.includes('modo normal') || lower.includes('desativa contínuo')){
+    continuousMode = false;
+    recog && recog.stop();
+    document.getElementById('vbtn').textContent = '🎤';
+    document.getElementById('vbtn').classList.remove('va');
+    appendMsg('Modo contínuo desativado.','jarvis');
+    jarvisSpeak('Desativado.');
+    return;
+  }
+
+  // Envia pro chat normalmente
+  sendChat();
+}
+
 function toggleVoice(){
-  if(!recog){appendMsg('Reconhecimento de voz não suportado neste navegador.','jarvis');return;}
-  const b=document.getElementById('vbtn');
-  if(listening){recog.stop();}
-  else{recog.start();listening=true;b.textContent='🔴';b.classList.add('va');}
+  if(!recog){
+    appendMsg('Reconhecimento de voz não suportado neste navegador. Use Chrome.','jarvis');
+    return;
+  }
+  if(listening){
+    continuousMode = false;
+    recog.stop();
+  } else {
+    try{ recog.start(); }
+    catch(e){ console.warn('recog start:', e); }
+  }
+}
+
+function toggleTTS(){
+  ttsEnabled = !ttsEnabled;
+  window.speechSynthesis && window.speechSynthesis.cancel();
+  const b = document.getElementById('tts-btn');
+  b.textContent = ttsEnabled ? '🔊' : '🔇';
+  const msg = ttsEnabled ? 'Voz do Jarvis ativada.' : 'Voz do Jarvis silenciada.';
+  appendMsg(msg,'jarvis');
+  if(ttsEnabled) jarvisSpeak('Voz ativada.');
+}
+
+function toggleContinuous(){
+  if(!recog){appendMsg('Voz não suportada neste navegador.','jarvis');return;}
+  continuousMode = !continuousMode;
+  const b = document.getElementById('cont-btn');
+  if(continuousMode){
+    b.textContent = '🟢'; b.style.borderColor = 'var(--green)'; b.style.color = 'var(--green)';
+    appendMsg('Modo contínuo ON — estou ouvindo constantemente, Sr. Stark.','jarvis');
+    jarvisSpeak('Modo contínuo ativado.');
+    if(!listening) try{ recog.start(); }catch(e){}
+  } else {
+    b.textContent = '👂'; b.style.borderColor = ''; b.style.color = '';
+    recog.stop();
+    appendMsg('Modo contínuo OFF.','jarvis');
+  }
 }
 
 // ── Wikipedia ──────────────────────────────────────────────────

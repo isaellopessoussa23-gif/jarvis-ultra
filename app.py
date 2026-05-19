@@ -197,15 +197,18 @@ MANIFEST = """{
   "theme_color": "#00d4ff",
   "orientation": "portrait-primary",
   "icons": [
-    {"src": "/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
-    {"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
+    {"src": "/icon192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "/icon512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
   ]
 }"""
 
 SW_JS = """
-const CACHE = 'jarvis-v2';
+const CACHE = 'jarvis-v4';
 self.addEventListener('install', e => { self.skipWaiting(); });
-self.addEventListener('activate', e => { self.clients.claim(); });
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== 'jarvis-v4').map(k => caches.delete(k)))));
+  self.clients.claim();
+});
 self.addEventListener('fetch', e => {
   if (e.request.url.includes('/api/') || e.request.url.includes('socket.io')) {
     e.respondWith(fetch(e.request).catch(() => new Response('{"error":"offline"}', {headers:{'Content-Type':'application/json'}})));
@@ -235,8 +238,9 @@ HTML_PAGE = r"""<!DOCTYPE html>
 <meta name="theme-color" content="#060f1e"/>
 <title>J.A.R.V.I.S — Ultra 2.0</title>
 <link rel="manifest" href="/static/manifest.json"/>
-<link rel="apple-touch-icon" href="/icon.png"/>
-<link rel="icon" type="image/png" href="/icon.png"/>
+<link rel="apple-touch-icon" href="/icon192.png"/>
+<link rel="icon" type="image/png" sizes="192x192" href="/icon192.png"/>
+<link rel="icon" type="image/png" sizes="512x512" href="/icon512.png"/>
 <link rel="icon" type="image/svg+xml" href="/icon.svg"/>
 <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -823,11 +827,21 @@ def serve_icon():
     return Response(ICON_SVG, mimetype="image/svg+xml")
 
 @app.route("/icon.png")
-def serve_icon_png():
+@app.route("/icon192.png")
+def serve_icon192():
     import os
-    icon_path = os.path.join(os.path.dirname(__file__), "icon.png")
-    if os.path.exists(icon_path):
-        with open(icon_path, "rb") as f:
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon192.png")
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            return Response(f.read(), mimetype="image/png")
+    return serve_icon()
+
+@app.route("/icon512.png")
+def serve_icon512():
+    import os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon512.png")
+    if os.path.exists(path):
+        with open(path, "rb") as f:
             return Response(f.read(), mimetype="image/png")
     return serve_icon()
 

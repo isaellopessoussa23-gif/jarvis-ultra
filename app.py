@@ -503,13 +503,15 @@ footer{text-align:center;padding:16px;color:var(--dim);font-size:.72rem;letter-s
     <div class="chat-box" id="chat-box"></div>
     <div class="crow">
       <input class="cinput" id="chat-input" type="text" placeholder="Fale com o J.A.R.V.I.S..." onkeydown="if(event.key==='Enter')sendChat()"/>
-      <button class="btn" id="vbtn"   onclick="toggleVoice()"      title="Microfone — toque para falar">🎤</button>
-      <button class="btn" id="cont-btn" onclick="toggleContinuous()" title="Modo contínuo — Jarvis fica escutando">👂</button>
-      <button class="btn" id="tts-btn"  onclick="toggleTTS()"        title="Voz do Jarvis — ligar/desligar">🔊</button>
+      <button class="btn" id="vbtn"      onclick="toggleVoice()"      title="Microfone">🎤</button>
+      <button class="btn" id="cont-btn"  onclick="toggleContinuous()" title="Modo contínuo">👂</button>
+      <button class="btn" id="conversa-btn" onclick="toggleConversa()" title="Modo conversa — responde e já escuta de novo">💬</button>
+      <button class="btn" id="wake-btn"  onclick="toggleWakeWord()"   title="Wake word — diga Ei Jarvis para ativar">🎯</button>
+      <button class="btn" id="tts-btn"   onclick="toggleTTS()"        title="Voz do Jarvis">🔊</button>
       <button class="btn" onclick="sendChat()">&#9654;</button>
     </div>
     <div style="font-size:.68rem;color:var(--dim);margin-top:6px;padding:0 4px">
-      💡 Diga <strong style="color:var(--cyan)">"Jarvis silencia"</strong> para calar a voz &middot; <strong style="color:var(--cyan)">"fica escutando"</strong> para modo contínuo
+      💡 <strong style="color:var(--cyan)">"Ei Jarvis"</strong> ativa por voz &middot; 💬 modo conversa &middot; 🎯 wake word &middot; <strong style="color:var(--cyan)">"Jarvis silencia"</strong> cala a voz
     </div>
   </div>
 
@@ -702,6 +704,7 @@ async function sendChat(){
   inp.value='';
   appendMsg(text,'user');
   chatHistory.push({role:'user',content:text});
+  learnFromMessage(text); // aprende com o usuário
   const thinking = appendMsg('processando...','jarvis thinking');
   const lower = text.toLowerCase();
 
@@ -731,18 +734,58 @@ async function sendChat(){
     jarvisSpeak(plain); return;
   }
 
-  const res = await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:text,history:chatHistory.slice(-10)})}).then(r=>r.json());
+  const res = await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:text, history:chatHistory.slice(-10), memory:getMemoryContext()})}).then(r=>r.json());
   const reply = res.response||res.error||'...';
   thinking.className='msg jarvis'; thinking.innerHTML='<div class="sender">J.A.R.V.I.S</div>'+reply;
   chatHistory.push({role:'assistant',content:reply}); saveHistory();
   if(res.provider) document.getElementById('ai-badge').textContent=res.provider.toUpperCase();
   jarvisSpeak(reply);
+  scheduleNextListen(); // modo conversa
 }
 function qcmd(t){ document.getElementById('chat-input').value=t; sendChat(); }
 
 // ── Voice System (STT + TTS) ────────────────────────────────────
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recog=null, listening=false, continuousMode=false, voiceEnabled=true, ttsEnabled=true;
+let wakeWordMode=false, wakeRecog=null, conversaMode=false, conversaTimer=null;
+
+// ── Memória do Jarvis ──────────────────────────────────────────
+const MEMORY_KEY = 'jmemory';
+let jarvisMemory = JSON.parse(localStorage.getItem(MEMORY_KEY)||'{}');
+// Estrutura: { name, likes, dislikes, facts:[], lastSeen }
+
+function saveMemory(){ localStorage.setItem(MEMORY_KEY, JSON.stringify(jarvisMemory)); }
+
+function learnFromMessage(text){
+  const lower = text.toLowerCase();
+  // Aprende nome
+  const nameMatch = lower.match(/(?:me chamo|meu nome é|pode me chamar de|sou o|sou a)\s+([a-záéíóúâêîôûãõçñ]+)/i);
+  if(nameMatch){
+    jarvisMemory.name = nameMatch[1].charAt(0).toUpperCase() + nameMatch[1].slice(1);
+    saveMemory();
+  }
+  // Aprende gostos
+  if(lower.includes('eu gosto de ') || lower.includes('adoro ') || lower.includes('amo ')){
+    const m = lower.match(/(?:eu gosto de|adoro|amo)\s+(.+?)(?:\.|,|$)/);
+    if(m){ jarvisMemory.likes = jarvisMemory.likes||[]; jarvisMemory.likes.push(m[1].trim()); jarvisMemory.likes = [...new Set(jarvisMemory.likes)].slice(-10); saveMemory(); }
+  }
+  // Aprende desgostos
+  if(lower.includes('odeio ') || lower.includes('não gosto de ') || lower.includes('detesto ')){
+    const m = lower.match(/(?:odeio|não gosto de|detesto)\s+(.+?)(?:\.|,|$)/);
+    if(m){ jarvisMemory.dislikes = jarvisMemory.dislikes||[]; jarvisMemory.dislikes.push(m[1].trim()); jarvisMemory.dislikes = [...new Set(jarvisMemory.dislikes)].slice(-10); saveMemory(); }
+  }
+  jarvisMemory.lastSeen = new Date().toISOString(); saveMemory();
+}
+
+function getMemoryContext(){
+  let ctx = '';
+  if(jarvisMemory.name) ctx += `O usuário se chama ${jarvisMemory.name}. `;
+  if(jarvisMemory.likes?.length) ctx += `Gosta de: ${jarvisMemory.likes.join(', ')}. `;
+  if(jarvisMemory.dislikes?.length) ctx += `Não gosta de: ${jarvisMemory.dislikes.join(', ')}. `;
+  return ctx;
+}
+
+function getUserName(){ return jarvisMemory.name || 'Sr. Stark'; }
 
 // ── TTS — Jarvis fala de volta ─────────────────────────────────
 function jarvisSpeak(text){
@@ -808,6 +851,10 @@ if(SR){
     // Modo contínuo: reinicia automaticamente
     if(continuousMode){
       setTimeout(() => { try{ recog.start(); }catch(e){} }, 300);
+    }
+    // Modo conversa: reinicia após resposta
+    if(conversaMode && !continuousMode){
+      scheduleNextListen();
     }
   };
 
@@ -979,6 +1026,95 @@ function processVoiceCommand(lower, original){
   sendChat();
 }
 
+// ── Wake Word — "Ei Jarvis" ────────────────────────────────────
+function startWakeWord(){
+  if(!SR){ appendMsg('Wake word não suportado neste navegador.','jarvis'); return; }
+  if(wakeRecog){ try{ wakeRecog.stop(); }catch(e){} }
+  wakeRecog = new SR();
+  wakeRecog.lang = 'pt-BR';
+  wakeRecog.continuous = true;
+  wakeRecog.interimResults = false;
+
+  wakeRecog.onresult = e => {
+    for(let i = e.resultIndex; i < e.results.length; i++){
+      const t = e.results[i][0].transcript.toLowerCase().trim();
+      if(t.includes('ei jarvis') || t.includes('hey jarvis') || t.includes('oi jarvis') || t.includes('jarvis')){
+        // Wake word detectada!
+        wakeWordActivated();
+        return;
+      }
+    }
+  };
+  wakeRecog.onend = () => { if(wakeWordMode) setTimeout(()=>{ try{ wakeRecog.start(); }catch(e){} }, 500); };
+  wakeRecog.onerror = e => { if(e.error !== 'no-speech' && wakeWordMode) setTimeout(()=>{ try{ wakeRecog.start(); }catch(e){} }, 1000); };
+  try{ wakeRecog.start(); }catch(e){}
+}
+
+function wakeWordActivated(){
+  // Para wake word brevemente, inicia escuta ativa
+  try{ wakeRecog.stop(); }catch(e){}
+  const wake = '⚡ Wake word detectada! Ouvindo...';
+  appendMsg(wake,'jarvis');
+  jarvisSpeak('Pois não, ' + getUserName());
+  // Ativa microfone principal
+  setTimeout(() => {
+    if(recog && !listening){
+      try{ recog.start(); }catch(e){}
+    }
+    // Retoma wake word depois de 8s
+    if(wakeWordMode) setTimeout(()=>{ try{ wakeRecog.start(); }catch(e){} }, 8000);
+  }, 500);
+}
+
+function toggleWakeWord(){
+  wakeWordMode = !wakeWordMode;
+  const b = document.getElementById('wake-btn');
+  if(wakeWordMode){
+    b.textContent = '⚡'; b.style.borderColor = 'var(--yellow)'; b.style.color = 'var(--yellow)';
+    b.style.animation = 'blink .8s ease-in-out infinite';
+    startWakeWord();
+    appendMsg('🎯 Wake word ativada! Diga <strong>"Ei Jarvis"</strong> a qualquer momento para me chamar.','jarvis');
+    jarvisSpeak('Wake word ativada. Diga: Ei Jarvis, para me chamar.');
+  } else {
+    b.textContent = '🎯'; b.style.borderColor = ''; b.style.color = ''; b.style.animation = '';
+    try{ wakeRecog && wakeRecog.stop(); }catch(e){}
+    appendMsg('Wake word desativada.','jarvis');
+  }
+}
+
+// ── Modo Conversa ─────────────────────────────────────────────
+function enterConversaMode(){
+  conversaMode = true;
+  const b = document.getElementById('conversa-btn');
+  b.textContent = '💬'; b.style.borderColor = 'var(--cyan)'; b.style.color = 'var(--cyan)';
+  appendMsg('💬 Modo conversa ativado! Após cada resposta minha, continuarei ouvindo automaticamente.','jarvis');
+  jarvisSpeak('Modo conversa ativado. Pode falar.');
+  if(!listening) try{ recog && recog.start(); }catch(e){}
+}
+
+function exitConversaMode(){
+  conversaMode = false;
+  clearTimeout(conversaTimer);
+  const b = document.getElementById('conversa-btn');
+  b.textContent = '💬'; b.style.borderColor = ''; b.style.color = '';
+  appendMsg('Modo conversa desativado.','jarvis');
+}
+
+function toggleConversa(){
+  if(conversaMode) exitConversaMode();
+  else enterConversaMode();
+}
+
+function scheduleNextListen(){
+  if(!conversaMode) return;
+  clearTimeout(conversaTimer);
+  conversaTimer = setTimeout(()=>{
+    if(conversaMode && !listening){
+      try{ recog && recog.start(); }catch(e){}
+    }
+  }, 1200);
+}
+
 function toggleVoice(){
   if(!recog){
     appendMsg('Reconhecimento de voz não suportado neste navegador. Use Chrome.','jarvis');
@@ -1063,7 +1199,12 @@ function toggleNote(i){notes[i].done=!notes[i].done;localStorage.setItem('jnotes
 (async()=>{
   await loadSysinfo(); loadProcs(); loadWeather(); loadNetwork();
   renderHistory(); renderNotes();
-  if(chatHistory.length===0) appendMsg('Bom dia, Sr. Stark. Todos os sistemas operacionais e prontos para servir. Como posso auxiliar?','jarvis');
+  const nome = getUserName();
+  if(chatHistory.length===0){
+    const saudacao = `Bom dia, ${nome}. Todos os sistemas online e prontos para servir. Diga "Ei Jarvis" ou toque em 🎯 para ativar wake word.`;
+    appendMsg(saudacao,'jarvis');
+    jarvisSpeak(`Bom dia, ${nome}. Sistemas prontos.`);
+  }
   // Detect AI provider
   fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:'ping',ping:true})})
     .then(r=>r.json()).then(d=>{if(d.provider) document.getElementById('ai-badge').textContent=d.provider.toUpperCase();}).catch(()=>{});
@@ -1254,6 +1395,7 @@ def ai():
     data    = request.json or {}
     prompt  = data.get("prompt", "")
     history = data.get("history", [])
+    memory  = data.get("memory", "")
     is_ping = data.get("ping", False)
 
     if not prompt:
@@ -1266,7 +1408,10 @@ def ai():
         return jsonify({"provider": "built-in"})
 
     # Monta histórico para IA
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    sys_content = SYSTEM_PROMPT
+    if memory:
+        sys_content += f" Contexto do usuário: {memory}"
+    messages = [{"role": "system", "content": sys_content}]
     for m in history[-8:]:
         if m.get("role") in ("user","assistant") and m.get("content"):
             messages.append({"role": m["role"], "content": str(m["content"])[:600]})

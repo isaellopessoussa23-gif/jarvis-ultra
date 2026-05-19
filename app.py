@@ -267,8 +267,8 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 /* ── Header ── */
 header{display:flex;align-items:center;justify-content:space-between;padding:12px 28px;background:var(--hbg);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;backdrop-filter:blur(10px)}
 .logo{display:flex;align-items:center;gap:14px}
-.logo .arc{width:40px;height:40px;border:2px solid var(--cyan);border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:var(--glow),inset 0 0 12px rgba(0,212,255,.3);animation:pulse 2s ease-in-out infinite}
-.logo .arc::after{content:'⚡';font-size:18px}
+.logo .arc{width:48px;height:48px;border:2px solid var(--cyan);border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:var(--glow),inset 0 0 12px rgba(0,212,255,.3);animation:pulse 2s ease-in-out infinite;overflow:hidden;padding:2px}
+.logo .arc img{width:100%;height:100%;border-radius:50%;object-fit:cover}
 @keyframes pulse{0%,100%{box-shadow:var(--glow),inset 0 0 12px rgba(0,212,255,.3)}50%{box-shadow:0 0 28px rgba(0,212,255,.7),inset 0 0 20px rgba(0,212,255,.5)}}
 .logo h1{font-size:1.4rem;font-weight:700;color:var(--cyan);letter-spacing:3px}
 .logo span{font-size:.7rem;color:var(--dim);letter-spacing:2px}
@@ -405,7 +405,7 @@ footer{text-align:center;padding:16px;color:var(--dim);font-size:.72rem;letter-s
 
 <header>
   <div class="logo">
-    <div class="arc"></div>
+    <div class="arc"><img src="/icon.png" alt="JARVIS"/></div>
     <div>
       <h1>J.A.R.V.I.S</h1>
       <span>JUST A RATHER VERY INTELLIGENT SYSTEM &middot; v4.0-ULTRA</span>

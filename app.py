@@ -585,19 +585,90 @@ def ai():
     if not prompt:
         return jsonify({"error":"prompt vazio"}), 400
     if not OPENAI_KEY:
-        fallbacks = {
-            "oi": "Ola, Sr. Stark. Todos os sistemas operacionais.",
-            "ola": "Ola! Como posso auxiliar?",
-            "quem": "Sou J.A.R.V.I.S v3.7.9-ULTRA. Criado para servir e impressionar.",
-            "hora": f"Sao exatamente {datetime.datetime.now().strftime('%H:%M:%S')}, Sr. Stark.",
-            "sistema": "Todos os sistemas operando dentro dos parametros normais. Nenhuma anomalia detectada.",
-            "motivac": "O unico modo de fazer um excelente trabalho e amar o que voce faz. — Steve Jobs. Ou usar Python. — Eu.",
-            "dica": "Dica do dia: Use list comprehensions. Sao mais rapidas e mais elegantas que loops for comuns.",
-        }
-        for k,v in fallbacks.items():
-            if k in prompt.lower():
-                return jsonify({"response": v})
-        return jsonify({"response": f"Processando '{prompt[:40]}...' com todos os circuitos, Sr. Stark. (Configure OPENAI_API_KEY para IA real.)"})
+        now = datetime.datetime.now()
+        hora = now.strftime('%H:%M:%S')
+        data = now.strftime('%d/%m/%Y')
+        cpu = psutil.cpu_percent(interval=0.3)
+        ram = psutil.virtual_memory()
+        disk = psutil.disk_usage("/")
+        p = prompt.lower()
+
+        # Saudações
+        if any(x in p for x in ["oi", "ola", "olá", "hey", "hello", "e ai", "eai", "tudo bem", "tudo bom"]):
+            resps = [
+                "Olá, Sr. Stark. Todos os sistemas operacionais e prontos para servir.",
+                "Bom dia, Sr. Stark. O que posso fazer por voce hoje?",
+                "Saudacoes! Estou aqui, aguardando suas ordens.",
+                "Online e operacional. Como posso auxilia-lo?",
+            ]
+            return jsonify({"response": random.choice(resps)})
+
+        # Quem é você
+        if any(x in p for x in ["quem", "voce", "você", "jarvis", "apresenta", "se apresente"]):
+            return jsonify({"response": "Sou J.A.R.V.I.S — Just A Rather Very Intelligent System, versao 3.7.9-ULTRA. Fui criado para monitorar, auxiliar e impressionar. A seu dispor, Sr. Stark."})
+
+        # Hora / data
+        if any(x in p for x in ["hora", "horas", "que horas"]):
+            return jsonify({"response": f"Sao exatamente {hora}, Sr. Stark."})
+        if any(x in p for x in ["data", "dia", "hoje", "semana"]):
+            return jsonify({"response": f"Hoje e {data}, Sr. Stark."})
+
+        # Sistema
+        if any(x in p for x in ["sistema", "status", "cpu", "ram", "memoria", "memória", "disco", "computador", "maquina", "máquina"]):
+            status_cpu = "normal" if cpu < 70 else "elevada" if cpu < 90 else "CRITICA"
+            status_ram = "normal" if ram.percent < 70 else "elevada" if ram.percent < 90 else "CRITICA"
+            return jsonify({"response": f"Relatorio de sistemas, Sr. Stark:\n• CPU: {cpu:.1f}% ({status_cpu})\n• RAM: {ram.percent:.1f}% — {ram.used/1e9:.1f}GB usados de {ram.total/1e9:.1f}GB ({status_ram})\n• Disco: {disk.percent:.1f}% — {disk.used/1e9:.1f}GB de {disk.total/1e9:.1f}GB\nTodos os sistemas dentro dos parametros aceitaveis."})
+
+        # Clima
+        if any(x in p for x in ["clima", "tempo", "chuva", "frio", "calor", "temperatura"]):
+            return jsonify({"response": "Para informacoes de clima em tempo real, utilize o modulo de clima no painel abaixo, Sr. Stark. Basta digitar o nome da cidade."})
+
+        # Piada
+        if any(x in p for x in ["piada", "engraçado", "engracado", "humor", "rir", "risada"]):
+            return jsonify({"response": random.choice(JOKES)})
+
+        # Motivação
+        if any(x in p for x in ["motiva", "animo", "ânimo", "força", "forca", "coragem", "inspiracao", "inspiração"]):
+            frases = [
+                "O unico modo de fazer um excelente trabalho e amar o que voce faz. — Steve Jobs",
+                "Nao importa o quao devagar voce va, desde que nao pare. — Confucio",
+                "O sucesso e a soma de pequenos esforcos repetidos dia apos dia. — R. Collier",
+                "Acredite que voce pode e ja esta na metade do caminho. — Theodore Roosevelt",
+                "Voce e mais corajoso do que acredita, mais forte do que parece e mais inteligente do que pensa. — A. A. Milne",
+            ]
+            return jsonify({"response": random.choice(frases)})
+
+        # Dica de programação
+        if any(x in p for x in ["dica", "programacao", "programação", "codigo", "código", "dev", "python", "tip"]):
+            dicas = [
+                "Dica: Use list comprehensions em Python. `[x*2 for x in lista]` e mais rapido e elegante que um loop for.",
+                "Dica: Nomeie variaveis com clareza. `user_age` e melhor que `ua`. Seu eu futuro agradece.",
+                "Dica: Commits pequenos e frequentes sao melhores que commits gigantes. Git blame sera seu amigo.",
+                "Dica: DRY — Don't Repeat Yourself. Se voce copiou o mesmo codigo duas vezes, vire uma funcao.",
+                "Dica: Leia erros de verdade. 90% dos bugs estao na mensagem de erro que voce ignorou.",
+                "Dica: `print()` ainda e uma ferramenta valida de debug. Nao deixe ninguem te dizer o contrario.",
+            ]
+            return jsonify({"response": random.choice(dicas)})
+
+        # Obrigado
+        if any(x in p for x in ["obrigado", "obrigada", "valeu", "thanks", "thank"]):
+            return jsonify({"response": "Sempre as ordens, Sr. Stark. Para isso estou aqui."})
+
+        # Wikipedia trigger
+        if any(x in p for x in ["o que e", "o que é", "quem foi", "quem e", "me fala sobre", "pesquisa", "wiki"]):
+            return jsonify({"response": "Para pesquisas, use o modulo Wikipedia no painel! Digite o termo na caixa de busca e encontrarei tudo sobre o assunto, Sr. Stark."})
+
+        # Calcular
+        if any(x in p for x in ["calcula", "quanto e", "quanto é", "calcule", "soma", "divide", "multiplica"]):
+            return jsonify({"response": "Para calculos, use a Calculadora Stark no painel! Ela suporta operacoes avancadas incluindo potenciacao (^) e parenteses."})
+
+        # Fallback inteligente
+        resps_fallback = [
+            f"Processando '{prompt[:50]}', Sr. Stark. Para respostas de IA completas, configure OPENAI_API_KEY nas variaveis de ambiente do Railway.",
+            f"Comando recebido. Meus circuitos de linguagem natural estao em modo economico. Configure uma chave de IA para desbloquear todo o meu potencial.",
+            "Entendido, Sr. Stark. Posso ajuda-lo melhor com informacoes de sistema, clima, Wikipedia ou calculos — use os modulos no painel!",
+        ]
+        return jsonify({"response": random.choice(resps_fallback)})
     try:
         res = requests.post(
             "https://api.openai.com/v1/chat/completions",

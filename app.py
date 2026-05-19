@@ -197,6 +197,7 @@ MANIFEST = """{
   "theme_color": "#00d4ff",
   "orientation": "portrait-primary",
   "icons": [
+    {"src": "/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
     {"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
   ]
 }"""
@@ -234,7 +235,8 @@ HTML_PAGE = r"""<!DOCTYPE html>
 <meta name="theme-color" content="#060f1e"/>
 <title>J.A.R.V.I.S — Ultra 2.0</title>
 <link rel="manifest" href="/static/manifest.json"/>
-<link rel="apple-touch-icon" href="/icon.svg"/>
+<link rel="apple-touch-icon" href="/icon.png"/>
+<link rel="icon" type="image/png" href="/icon.png"/>
 <link rel="icon" type="image/svg+xml" href="/icon.svg"/>
 <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -819,6 +821,15 @@ def serve_sw():
 @app.route("/icon.svg")
 def serve_icon():
     return Response(ICON_SVG, mimetype="image/svg+xml")
+
+@app.route("/icon.png")
+def serve_icon_png():
+    import os
+    icon_path = os.path.join(os.path.dirname(__file__), "icon.png")
+    if os.path.exists(icon_path):
+        with open(icon_path, "rb") as f:
+            return Response(f.read(), mimetype="image/png")
+    return serve_icon()
 
 @app.route("/api/sysinfo")
 def sysinfo():

@@ -1,0 +1,7 @@
+flask
+flask-socketio
+psutil
+requests
+wikipedia-api
+gunicorn
+eventlet

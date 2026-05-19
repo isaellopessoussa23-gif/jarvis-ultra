@@ -4,3 +4,15 @@ index.html
 className
 Tailwind
 interface do Jarvis
+class 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS</title>
+</head>
+
+<body>
+
+<div class="min-h-screen bg-black overflow-hidden text-cyan-400 relative font-sans">
